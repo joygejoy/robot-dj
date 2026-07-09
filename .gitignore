@@ -1,4 +1,14 @@
-__pycache__/
+# This repo root mixes CAD (mount/EOAT design) with software/ (the actual
+# choreography code). Only the software side and repo docs are meant to be
+# tracked in git - CAD files are large, don't diff meaningfully, and don't
+# belong in version control here.
+/*
+!/software
+!/.gitignore
+!/README.md
+
+# Python
+**/__pycache__/
 *.pyc
 .venv/
 venv/

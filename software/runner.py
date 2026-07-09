@@ -24,6 +24,10 @@ def load_script():
 def dispatch(meca, action):
     if action["action"] == "move_to":
         meca.move_to(action["pose"], via=action.get("via"))
+    elif action["action"] == "move_slider":
+        meca.move_slider(action["control"], action["value"])
+    elif action["action"] == "turn_knob":
+        meca.turn_knob(action["control"], action["value"])
     else:
         raise ValueError(f"Unknown action type: {action['action']}")
 

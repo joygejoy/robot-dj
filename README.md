@@ -9,7 +9,9 @@ right spot, just a trusted, pre-taught sequence of moves.
 
 - Everything at the root (`*.SLDPRT`, `*.stp`, `board/`, `gripper*/`) is
   SolidWorks CAD for the mount, the FLX4 model, and the end-of-arm tool
-  (EOAT).
+  (EOAT). These files live on disk here but are **not tracked in git**
+  (see `.gitignore`) - they're large binaries that don't diff meaningfully,
+  and this repo is for the software side only.
 - `software/` is all the Python that runs the show.
 
 ## Hardware
@@ -79,18 +81,52 @@ assumptions here:
   (e.g. `crossfade_left` <-> `crossfade_right`) while the slot stays
   engaged - no rotation needed mid-move.
 
-Once you've confirmed these mechanically, the action types in
-`song_script.json` / `runner.py` can be extended beyond `move_to` to cover
-them.
+Once you've confirmed these mechanically, tune `degrees_per_unit` in
+`controls.json` for real (see "Knob/slider state tracking" below).
+
+## Knob/slider state tracking
+
+The FLX4 has no sensors we can read, so the robot has no way to know where
+a knob or slider physically is except by remembering what it last moved it
+to. `board_state.py` is that memory: every continuous control is tracked as
+a normalized value from `0.0` (full left/counter-clockwise) to `1.0` (full
+right/clockwise), starting at `0.5` (center) - per the assumption that
+someone resets the physical board to center before each run. State is
+in-memory only, reset every run.
+
+`controls.json` maps each control name to how it's actually moved:
+
+- **`"type": "slider"`** - has taught `left`/`right` endpoint positions (from
+  `positions.json`). `MecaController.move_slider(control, value)` linearly
+  interpolates the 6 joint angles between those endpoints and moves there
+  directly - an absolute move, so it doesn't need BoardState to work, but it
+  still records the result.
+- **`"type": "knob"`** - moved by a *relative* joint-6 rotation (no absolute
+  angle means "knob at 75%"), so it needs a `degrees_per_unit` calibration
+  constant (how many degrees of joint-6 rotation correspond to the knob's
+  full 0.0-1.0 sweep). **Not measured yet** - the placeholder in
+  `controls.json` is a guess. `MecaController.turn_knob(control, value)`
+  reads the last known value from BoardState, computes the delta, and calls
+  `MoveJointsRel`.
+
+In `song_script.json`, use `{ "action": "move_slider", "control": "...",
+"value": 0.0-1.0 }` or `{ "action": "turn_knob", "control": "...", "value":
+0.0-1.0 }` alongside the existing `move_to`. Both assume the gripper is
+already engaged at working depth - get it there with a preceding `move_to`
+(using `via` to hover in first) before calling either.
 
 ## Files
 
 - `software/positions.json` - taught positions (see above).
+- `software/controls.json` - maps slider/knob names to how they're moved
+  (see "Knob/slider state tracking" above).
+- `software/board_state.py` - in-memory tracker for where each slider/knob
+  currently is, since the board has no sensors to read this back.
 - `software/teach.py` - jog with the MECA web interface, then run this to
   record the current joint angles under a name. Read-only/monitor mode -
   never moves the arm itself.
 - `software/meca_controller.py` - actually commands the robot: connect,
-  activate, home, move to a named position.
+  activate, home, move to a named position, move a slider, turn a knob.
 - `software/song_script.json` - the choreography timeline (time in seconds
   from song start + an action).
 - `software/runner.py` - plays the script: polls elapsed time in a tight
