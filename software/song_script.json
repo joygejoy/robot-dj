@@ -1,5 +1,0 @@
-[
-  { "time": 0.0, "action": "move_to", "pose": "home" },
-  { "time": 2.0, "action": "move_to", "pose": "eoat_vertical_ref" },
-  { "time": 4.0, "action": "move_to", "pose": "home" }
-]

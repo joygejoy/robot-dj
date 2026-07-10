@@ -1,0 +1,26 @@
+{
+  "crossfader": {
+    "type": "slider",
+    "left": "crossfade_left",
+    "right": "crossfade_right"
+  },
+  "right_mid": {
+    "type": "knob",
+    "degrees_per_unit": 180
+  },
+  "left_filter": {
+    "type": "knob",
+    "degrees_per_unit": 180
+  },
+  "right_volume": {
+    "type": "slider",
+    "left": "right_volume_half",
+    "right": "right_volume_top"
+  },
+  "_comment_knob_example": "knob controls need a measured degrees_per_unit before use - see README 'Knob turns' section. Example once calibrated:",
+  "_example_knob": {
+    "type": "knob",
+    "degrees_per_unit": 180
+  },
+  "_comment_new_knobs": "right_mid and left_filter degrees_per_unit (180) is still a PLACEHOLDER, copied from _example_knob - NOT independently measured off the hardware. It happens to match what the choreography needs (0.5 -> 0.0 delta = 90 deg, matching the CCW 90 deg turns Joy described), so it's self-consistent, but recalculate it once the real degrees_per_unit is measured off the knob itself."
+}

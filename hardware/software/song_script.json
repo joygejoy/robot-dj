@@ -1,0 +1,29 @@
+[
+  { "time": 0.0, "action": "move_to", "pose": "right_mid_hover", "via": "safe_hover" },
+  { "time": 0.5, "action": "move_to", "pose": "right_mid_engage" },
+  { "time": 1.0, "action": "turn_knob", "control": "right_mid", "value": 0.0 },
+  { "time": 1.5, "action": "move_to", "pose": "right_mid_hover" },
+
+  { "time": 2.0, "action": "move_to", "pose": "right_volume_top", "via": "safe_hover" },
+  { "time": 2.5, "action": "move_slider", "control": "right_volume", "value": 0.0 },
+
+  { "time": 4.8, "action": "move_to", "pose": "left_play_hover", "via": "safe_hover" },
+  { "time": 5.1, "action": "move_to", "pose": "left_play_press" },
+  { "time": 5.4, "action": "move_to", "pose": "left_play_hover" },
+
+  { "time": 17.723, "action": "move_to", "pose": "right_play_hover", "via": "safe_hover" },
+  { "time": 18.023, "action": "move_to", "pose": "right_play_press" },
+  { "time": 18.323, "action": "move_to", "pose": "right_play_hover" },
+
+  { "time": 19.569, "action": "move_to", "pose": "right_volume_half", "via": "safe_hover" },
+  { "time": 19.869, "action": "move_slider", "control": "right_volume", "value": 1.0 },
+
+  { "time": 20.169, "action": "move_to", "pose": "right_mid_hover", "via": "safe_hover" },
+  { "time": 20.469, "action": "move_to", "pose": "right_mid_engage" },
+  { "time": 20.769, "action": "turn_knob", "control": "right_mid", "value": 0.5 },
+  { "time": 21.069, "action": "move_to", "pose": "right_mid_hover" },
+
+  { "time": 32.492, "action": "move_to", "pose": "left_filter_hover", "via": "safe_hover" },
+  { "time": 32.692, "action": "move_to", "pose": "left_filter_engage" },
+  { "time": 32.792, "action": "turn_knob", "control": "left_filter", "value": 0.0 }
+]
