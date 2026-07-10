@@ -13,12 +13,14 @@ This connects in monitor mode (read-only), so it will not fight with the
 web interface for control of the robot - you keep jogging from the browser,
 this script just records where you end up.
 
-TEACHING ORDER (teach these first, in this order):
-  1. home              - safe position, clear of the board and the mixer
-  2. eoat_vertical_ref  - gripper's slot oriented for a vertical slider
-  3. eoat_horizontal_ref - gripper's slot rotated 90 deg (joint 6 only) for
-                           a horizontal slider (e.g. the crossfader)
-  Then teach real controls (faders, knobs, buttons) as you need them.
+TEACHING ORDER:
+  1. home       - safe position, clear of the board and the mixer
+  2. the "engaged" position for each real control (fader, knob, button) as
+     you need it for the choreography - the exact spot the gripper lands to
+     press/turn/grip it.
+  Hover/offset positions (retracted safely off the board) aren't jogged
+  directly - see derive_position.py, which computes those from an already-
+  taught engaged position via a Cartesian offset instead.
 """
 import json
 import os

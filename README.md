@@ -7,12 +7,12 @@ right spot, just a trusted, pre-taught sequence of moves.
 
 ## Repo layout
 
-- Everything at the root (`*.SLDPRT`, `*.stp`, `board/`, `gripper*/`) is
-  SolidWorks CAD for the mount, the FLX4 model, and the end-of-arm tool
-  (EOAT). These files live on disk here but are **not tracked in git**
-  (see `.gitignore`) - they're large binaries that don't diff meaningfully,
-  and this repo is for the software side only.
-- `software/` is all the Python that runs the show.
+- `hardware/` holds SolidWorks CAD for the mount, the FLX4 model, and the
+  end-of-arm tool (EOAT) - `*.SLDPRT`, `*.stp`, `board/`, `gripper*/`. These
+  files live on disk here but most are **not tracked in git** (see
+  `hardware/.gitignore`) - they're large binaries that don't diff
+  meaningfully.
+- `hardware/software/` is all the Python that runs the show.
 
 ## Hardware
 
@@ -29,7 +29,8 @@ right spot, just a trusted, pre-taught sequence of moves.
 
 ## How positions work
 
-Positions are saved as 6 joint angles (degrees) in `software/positions.json`,
+Positions are saved as 6 joint angles (degrees) in
+`hardware/software/positions.json`,
 not XYZ coordinates. That was a deliberate call before any of this was
 built: joint angles are unambiguous - the robot hits the exact same spot
 every time, with no inverse-kinematics math that could resolve to the wrong
@@ -51,15 +52,16 @@ the natural next step - not needed now.
 
 1. **`home`** - safe position, clear of the board and the mixer. Move here
    before/after every run.
-2. **`eoat_vertical_ref`** and **`eoat_horizontal_ref`** - two reference
-   wrist orientations, 90 degrees apart on joint 6 only, matching the two
-   ways the EOAT slot can engage a slider (vertical channel faders vs. the
-   horizontal crossfader). Every taught position already bakes in whichever
-   joint-6 angle you were at when you taught it - these two references exist
-   so you can sanity-check a new position's joint-6 value against them and
-   confirm it's oriented the way you meant it to be.
-3. Real controls (faders, knobs, buttons) as you need them for the
-   choreography.
+2. Each real control's **engaged** position (the exact spot the gripper
+   lands to press/turn/grip it), for every control the choreography needs.
+   Jog to it and run `teach.py`.
+3. The **hover/offset** positions derived from those (`safe_hover`, and a
+   `<name>_hover` for each control) - these aren't jogged directly, since a
+   6-axis arm's joint angles don't move in a simple 1-to-1 way with "back up
+   3cm". Use `derive_position.py` instead: it moves to an already-taught
+   engaged position, commands a pure Cartesian offset, and saves the
+   resulting joint angles under a new name. See `derive_position.py`'s
+   docstring for exact usage.
 
 ### Safety pattern: hover, don't drag
 
@@ -71,15 +73,15 @@ parameter for exactly this - pass the name of a safe hover position and it
 moves there first. This is the same "hover + press" idea already decided
 for buttons, just applied everywhere reorientation happens.
 
-### Knob turns and slider moves (not proven out yet)
+### Knob turns and slider moves (not proven out mechanically yet)
 
-Not fully validated mechanically yet, so the software doesn't hard-code
-assumptions here:
-- **Knobs**: likely a relative joint-6 rotation while the cylindrical cutout
-  is engaged.
-- **Sliders**: likely a straight move between two taught endpoint positions
-  (e.g. `crossfade_left` <-> `crossfade_right`) while the slot stays
-  engaged - no rotation needed mid-move.
+- **Knobs**: a relative joint-6 rotation while the cylindrical cutout is
+  engaged. `degrees_per_unit` in `controls.json` is currently a placeholder
+  (180) - self-consistent with the choreography, but not independently
+  measured off the real hardware yet.
+- **Sliders**: a straight move between two taught endpoint positions (e.g.
+  `right_volume_half` <-> `right_volume_top`) while the slot stays engaged -
+  no rotation needed mid-move.
 
 Once you've confirmed these mechanically, tune `degrees_per_unit` in
 `controls.json` for real (see "Knob/slider state tracking" below).
@@ -117,38 +119,44 @@ already engaged at working depth - get it there with a preceding `move_to`
 
 ## Files
 
-- `software/positions.json` - taught positions (see above).
-- `software/controls.json` - maps slider/knob names to how they're moved
-  (see "Knob/slider state tracking" above).
-- `software/board_state.py` - in-memory tracker for where each slider/knob
-  currently is, since the board has no sensors to read this back.
-- `software/teach.py` - jog with the MECA web interface, then run this to
-  record the current joint angles under a name. Read-only/monitor mode -
-  never moves the arm itself.
-- `software/meca_controller.py` - actually commands the robot: connect,
-  activate, home, move to a named position, move a slider, turn a knob.
-- `software/song_script.json` - the choreography timeline (time in seconds
-  from song start + an action).
-- `software/runner.py` - plays the script: polls elapsed time in a tight
-  loop (not `time.sleep()`, which would drift by however long each move
-  actually takes) and dispatches each action when its time arrives.
+- `hardware/software/positions.json` - taught/derived positions (see above).
+- `hardware/software/controls.json` - maps slider/knob names to how they're
+  moved (see "Knob/slider state tracking" above).
+- `hardware/software/board_state.py` - in-memory tracker for where each
+  slider/knob currently is, since the board has no sensors to read this
+  back.
+- `hardware/software/teach.py` - jog with the MECA web interface, then run
+  this to record the current joint angles under a name. Read-only/monitor
+  mode - never moves the arm itself.
+- `hardware/software/derive_position.py` - computes a hover/offset position
+  from an already-taught one via a Cartesian move, instead of jogging it
+  directly. Moves the real robot.
+- `hardware/software/meca_controller.py` - actually commands the robot:
+  connect, activate, home, move to a named position, move a slider, turn a
+  knob.
+- `hardware/software/song_script.json` - the choreography timeline (time in
+  seconds from song start + an action).
+- `hardware/software/runner.py` - plays the script: polls elapsed time in a
+  tight loop (not `time.sleep()`, which would drift by however long each
+  move actually takes) and dispatches each action when its time arrives.
+- `hardware/software/test_actions.py` - try a single `move-to`/`turn-knob`/
+  `press-button` action in isolation, without running the whole timeline.
 
 ## Build order
 
-1. Connect to the MECA, teach `home`, `eoat_vertical_ref`,
-   `eoat_horizontal_ref`.
-2. Teach 3-4 real positions (a fader, a knob, a button) as a test.
-3. Run `runner.py` against the example `song_script.json` to confirm
-   sequencing/timing works.
-4. Wire in real audio playback (e.g. `pygame`) so the timeline is synced to
-   an actual song instead of wall-clock time from launch.
-5. Teach the rest of the positions the real choreography needs, write the
-   real `song_script.json` for the track.
+1. Connect to the MECA, teach `home` and each control's engaged position.
+2. Run `derive_position.py` for `safe_hover` and each control's hover/offset
+   position.
+3. Use `test_actions.py` to try each position/knob/button individually.
+4. Run `runner.py` against `song_script.json` to confirm the full
+   choreography, timed against manual Serato playback.
+5. Mechanically validate knob/slider assumptions and re-measure
+   `degrees_per_unit` for real.
 
 ## Setup
 
 ```
-cd software
+cd hardware/software
 pip install -r requirements.txt
 python teach.py
 ```
