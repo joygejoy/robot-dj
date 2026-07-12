@@ -63,15 +63,22 @@ the natural next step - not needed now.
    resulting joint angles under a new name. See `derive_position.py`'s
    docstring for exact usage.
 
-### Safety pattern: hover, don't drag
+### Safety pattern: transit at a safe X plane, always
 
 Never reorient joint 6 or travel sideways while the gripper is down at
 "working depth" (engaged with a knob/slider, or at button-press height).
-Retract to a safe hover height first, reorient/translate there, then
-descend onto the next target. `MecaController.move_to()` has a `via`
-parameter for exactly this - pass the name of a safe hover position and it
-moves there first. This is the same "hover + press" idea already decided
-for buttons, just applied everywhere reorientation happens.
+`MecaController.move_to()` enforces this automatically for every move, no
+`via` parameter needed: if the arm is currently deeper than the measured
+safe clearance depth (`SAFE_X`, 175mm - the same value baked into every
+`_hover` position via `derive_position.py`), it first retracts straight
+back along X to `SAFE_X` at its current Y/Z, then slides across to the
+target's Y/Z while holding X at `SAFE_X`, then dives straight in along X to
+the target's actual pose. Every leg is a genuine straight-line Cartesian
+move (`MoveLin`), not a joint-space guess - since two points that are both
+at or beyond `SAFE_X` can't have an in-between point that's shallower, the
+depth can't dip unsafely mid-move. This requires the target position to
+have a stored Cartesian pose (captured by `teach.py`, or computed by
+`derive_position.py`) - not just joint angles.
 
 ### Knob turns and slider moves (not proven out mechanically yet)
 
@@ -115,7 +122,7 @@ In `song_script.json`, use `{ "action": "move_slider", "control": "...",
 "value": 0.0-1.0 }` or `{ "action": "turn_knob", "control": "...", "value":
 0.0-1.0 }` alongside the existing `move_to`. Both assume the gripper is
 already engaged at working depth - get it there with a preceding `move_to`
-(using `via` to hover in first) before calling either.
+to the control's engaged position first (see "Safety pattern" above).
 
 ## Files
 

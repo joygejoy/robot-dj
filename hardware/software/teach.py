@@ -5,8 +5,11 @@ How to use:
    to wherever you want the gripper to land. Leave that browser tab open the
    whole time.
 2. Come back to this terminal, type a name for that spot, and press Enter.
-3. This script reads the arm's CURRENT joint angles and saves them into
-   positions.json under that name. It never moves the arm itself.
+3. This script reads the arm's CURRENT joint angles AND Cartesian pose and
+   saves both into positions.json under that name. It never moves the arm
+   itself. The pose is what lets derive_position.py compute offset
+   positions (e.g. a hover point) with pure math instead of having to
+   physically revisit this spot later.
 4. Type "done" when you're finished teaching positions for this session.
 
 This connects in monitor mode (read-only), so it will not fight with the
@@ -63,9 +66,10 @@ def main():
                     continue
 
             joints = robot.GetJoints()
-            positions[name] = joints
+            pose = robot.GetPose()
+            positions[name] = {"joints": joints, "pose": pose}
             save_positions(positions)
-            print(f"Saved '{name}': {joints}\n")
+            print(f"Saved '{name}': joints={joints} pose={pose}\n")
     finally:
         robot.Disconnect()
         print(f"\nSaved {len(positions)} position(s) to {POSITIONS_FILE}")

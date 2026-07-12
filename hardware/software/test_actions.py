@@ -15,18 +15,7 @@ Usage:
 """
 import argparse
 
-from meca_controller import MecaController
-
-# Engaged position -> its safe hover counterpart. move-to stops at the hover
-# version for anything on this list instead of diving to working depth.
-HOVER_FOR = {
-    "right_mid_engage": "right_mid_hover",
-    "right_volume_top": "right_volume_top_hover",
-    "right_volume_half": "right_volume_half_hover",
-    "right_play_press": "right_play_hover",
-    "left_play_press": "left_play_hover",
-    "left_filter_engage": "left_filter_hover",
-}
+from meca_controller import MecaController, HOVER_FOR
 
 KNOBS = {
     "right_mid": {"engage": "right_mid_engage", "hover": "right_mid_hover"},
@@ -48,16 +37,16 @@ def cmd_move_to(mc, name):
             f"'{name}' needs its hover counterpart '{target}' taught first "
             "(see derive_position.py) before it can be tested safely."
         )
-    print(f"Moving to safe_hover, then '{target}' (safe height only, no dive)...")
-    mc.move_to(target, via="safe_hover")
+    print(f"Moving to '{target}' (transit at safe X, no dive)...")
+    mc.move_to(target)
     print("Done.")
 
 
 def cmd_turn_knob(mc, knob, degrees, direction):
     cfg = KNOBS[knob]
     delta = -degrees if direction == "left" else degrees
-    print(f"Moving to safe_hover, then '{cfg['hover']}', then engaging '{cfg['engage']}'...")
-    mc.move_to(cfg["hover"], via="safe_hover")
+    print(f"Moving to '{cfg['hover']}', then engaging '{cfg['engage']}'...")
+    mc.move_to(cfg["hover"])
     mc.move_to(cfg["engage"])
     print(f"Rotating joint 6 by {delta:+.1f} deg ({direction})...")
     mc.robot.MoveJointsRel(0, 0, 0, 0, 0, delta)
@@ -69,8 +58,8 @@ def cmd_turn_knob(mc, knob, degrees, direction):
 
 def cmd_press_button(mc, button):
     cfg = BUTTONS[button]
-    print(f"Moving to safe_hover, then '{cfg['hover']}'...")
-    mc.move_to(cfg["hover"], via="safe_hover")
+    print(f"Moving to '{cfg['hover']}'...")
+    mc.move_to(cfg["hover"])
     print(f"Pressing: moving to '{cfg['press']}'...")
     mc.move_to(cfg["press"])
     print(f"Retracting to '{cfg['hover']}'...")
@@ -97,6 +86,7 @@ def main():
 
     mc = MecaController()
     mc.connect()
+    mc.go_home()
     try:
         if args.cmd == "move-to":
             cmd_move_to(mc, args.name)

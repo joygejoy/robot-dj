@@ -23,11 +23,18 @@ def load_script():
 
 def dispatch(meca, action):
     if action["action"] == "move_to":
-        meca.move_to(action["pose"], via=action.get("via"))
+        meca.move_to(action["pose"])
+    elif action["action"] == "drag_to":
+        meca.drag_to(action["pose"])
     elif action["action"] == "move_slider":
         meca.move_slider(action["control"], action["value"])
     elif action["action"] == "turn_knob":
-        meca.turn_knob(action["control"], action["value"])
+        meca.turn_knob(
+            action["control"],
+            action["value"],
+            joint_vel=action.get("joint_vel"),
+            min_duration=action.get("min_duration"),
+        )
     else:
         raise ValueError(f"Unknown action type: {action['action']}")
 
@@ -50,9 +57,9 @@ def run():
                 dispatch(meca, action)
                 next_index += 1
     finally:
-        meca.go_home()
+        meca.retreat_to_safe()
         meca.disconnect()
-        print("Run complete, returned home.")
+        print("Run complete, retreated to safe depth.")
 
 
 if __name__ == "__main__":
