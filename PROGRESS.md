@@ -156,19 +156,11 @@ Positions are expressed in beats-since-track-start, the same unit `phase_lock.py
 for the live feed - so the planner (Phase 3) can eventually compare "the analyzer says
 the drop is at beat 128" against "PhaseLock says we're live at beat 127.3" directly.
 
-What changed the session before this (see "Key decisions" for the why, kept for context):
-- Ran the clean, lag-free rate check from the prior session's open question (pause/play/pause
-  on deck 1, reading Mixxx time + the feed's `beat` value at each pause).
-- Readings: `T1 = 0:00.02`, `B1 = 1.00`; `T2 = 0:27.12`, `B2 = 41.65`; `bpm = 90.0`.
-- Check: `ΔT = 27.10s`, `ΔB = 40.65`. Expected `ΔB = ΔT × (bpm/60) = 27.10 × 1.5 = 40.65` —
-  **exact match.** The beat number advances at precisely the reported BPM rate, no drift.
-- This confirms `midi_cc_feed.py` + `phase_lock.py` are correct and ready to build on.
-
-**Your immediate next action:** start Phase 2 — the analyzer. It needs to take a song and
-produce `{bpm, beats, downbeats, sections}` JSON (see Phases table). This is pure offline
-audio analysis, no Mixxx/MIDI/arm needed to begin.
-
-What changed the session before this (see "Key decisions" for the why, kept for context):
+**History (Phase 1, oldest first - kept for context, not action items):**
+- Phase 1 gate check: pause/play/pause on deck 1, reading Mixxx time + the feed's `beat`
+  value at each pause. Readings: `T1 = 0:00.02`, `B1 = 1.00`; `T2 = 0:27.12`, `B2 = 41.65`;
+  `bpm = 90.0`. Check: `ΔT = 27.10s`, `ΔB = 40.65`. Expected `ΔB = ΔT × (bpm/60) = 27.10 ×
+  1.5 = 40.65` — **exact match.** Confirmed `midi_cc_feed.py` + `phase_lock.py` are correct.
 - The MIDI-clock path (`midi_feed.py`) is a **dead end** with this Mixxx: the stock
   "MIDI for light" preset sends VU meters + MTC timecode + a per-beat note, but **no MIDI
   clock and no continuous beat phase**. Confirmed by dumping the raw MIDI.
