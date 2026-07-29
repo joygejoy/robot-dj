@@ -7,7 +7,37 @@
 
 ## START HERE NEXT SESSION
 
-**Where we are:** **Phase 1 AND Phase 2 are done.** Phase 3 (planner + simulator) is next.
+**Where we are:** Phase 1 and Phase 2 are done. Phase 3's **planner half** is built and
+passes all 5 of its offline tests. The **simulator half** (actually executing a routine
+in Mixxx so you can hear it) is NOT built yet - that's the next piece.
+
+**Your immediate next action:** the simulator needs a second custom Mixxx mapping - this
+time for INPUT (Python → Mixxx), on a separate loopMIDI port from Phase 1's beat-feed
+port, driving the crossfader by CC and triggering song B's entry via a Mixxx hot cue
+(never a raw seek - see planner.py's docstring for why: the real arm can only press
+buttons, so the simulator has to work the same way it eventually will). This mapping
+doesn't exist yet. Before building it: create a second loopMIDI port (e.g. `RobotDJSim`)
+alongside the existing `MixxBeat` one, so both can run at once.
+
+**Phase 3 v1 scope (agreed this session):** crossfader + volume only, no EQ swaps yet -
+proves the plan → MIDI → Mixxx → audible-mix pipeline before adding musical sophistication.
+You choose the transition point by hand (which beat of song A, which beat/hot cue of song
+B) rather than the planner picking automatically - keeps this phase about executing a
+transition well, not about judging which songs/sections sound good together.
+
+**What Phase 3 built this session:**
+- `brain/planner.py` - `plan_transition(song_a, song_b, start_beat_a, entry_beat_b,
+  crossfade_beats, hotcue_b) -> routine`. Takes two analyzer.py outputs plus your chosen
+  transition point, returns a beat-relative routine: crossfader keyframes (0.0 at the
+  start beat, 1.0 `crossfade_beats` later) and the beat at which to trigger song B's hot
+  cue. Refuses to plan (raises `ValueError` with a clear message) if: the requested beat
+  is out of range, the crossfade would run past song A's last detected beat, or the two
+  songs' bpms differ by more than 3% (assumed tempo-matched via Mixxx's own SYNC - a
+  mismatch this large means the decks were never actually synced, so the routine would
+  drift rather than proceed as blind wall-clock timing would hide).
+- `brain/test_planner.py` - 5/5 passing, fully offline (fake bpm/beat-count dicts, no
+  Mixxx/real songs needed): correct routine shape, and each of the three rejection cases
+  above.
 
 Phase 2's analyzer (`brain/analyzer.py`) passes all 5 offline synthetic tests and has been
 validated against 4 real files. bpm/beats/downbeats check out cleanly on all of them.
@@ -171,7 +201,7 @@ always keep up, 4. no anticipation of the arm's own movement time.
 | 0 | Setup | Branch, Mixxx installed, FLX4↔Mixxx, brain/ env | ✅ done (FLX4 check deferred — not on hand) |
 | 1 | **Live feed** | Python reads Mixxx's live beat/position (the drift fix's foundation) | ✅ done — gate confirmed (rate matches BPM exactly, see top) |
 | 2 | Analyzer | `analyze(song) → {bpm, beats, downbeats, sections}` JSON | ✅ done — validated on 4 real files, sections musically plausible (see top) |
-| 3 | Planner + Simulator | Generate a transition routine and **hear it in Mixxx**, no arm | ⬜ |
+| 3 | Planner + Simulator | Generate a transition routine and **hear it in Mixxx**, no arm | 🔶 planner done (5/5 tests); simulator + Mixxx input mapping not built (see top) |
 | 4 | Teach controls | Teach the arm the crossfader, channel faders, EQ/filter knobs, play/cue/SYNC buttons (no jog) | ⬜ physical |
 | 5 | Arm backend | Run the validated routine on the arm, timed by the live feed + per-action lead times | ⬜ |
 
@@ -193,6 +223,12 @@ Phase 4 (teaching) can happen in parallel at the hardware. Phase 5 joins the two
   See "START HERE" above for how it works and its tuning constants.
 - `test_analyzer.py` — offline proof via a synthetic click track (no real song needed).
   Run: `python test_analyzer.py`. Currently passes 5/5.
+- `planner.py` — Phase 3 core (planner half): `plan_transition(...) -> routine`.
+  Beat-relative crossfade routine between two analyzed songs. No Mixxx needed to run.
+- `test_planner.py` — offline proof with fake bpm/beat-count dicts. Run:
+  `python test_planner.py`. Currently passes 5/5.
+- `simulator.py` — NOT BUILT YET (Phase 3, simulator half). Will execute a routine live
+  in Mixxx via a new input MIDI mapping, timed against Phase 1's live beat feed.
 
 - `phase_lock.py` — core math: turns Mixxx's intermittent updates into a smooth live beat
   number. Standard-library only. **The correctness-critical piece.**
