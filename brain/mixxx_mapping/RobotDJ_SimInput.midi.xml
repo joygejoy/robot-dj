@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Robot DJ V2 - Mixxx INPUT mapping (Phase 3 simulator).
+
+  Opposite direction from RobotDJ_BeatFeed (which is OUTPUT: Mixxx -> Python). This one
+  is INPUT: Python (simulator.py) -> Mixxx, driving the crossfader and triggering a hot
+  cue on whichever deck song B is loaded on. Load this on a SEPARATE loopMIDI port from
+  the beat-feed mapping - Mixxx can't use one port for both an input and output mapping
+  at once.
+
+  No <scriptfiles>/custom JS needed: unlike the beat feed (which had to poll a timer and
+  hand-build MIDI messages to send OUT), this is a plain declarative passthrough - Mixxx's
+  own MIDI engine reads each incoming CC/note and applies it directly to the named control,
+  using its standard 7-bit "normal" scaling (0..127 -> the control's own native range).
+
+  CONTROL LAYOUT (must match simulator.py)
+  -----------------------------------------
+      control                      status  midino  meaning
+      ---------------------------  ------  ------  ----------------------------------
+      [Master] crossfader          0xB0    0x10    0=full deck1 side .. 127=full deck2
+      [Channel1] hotcue_1_activate 0x90    0x00    press = seek to + play deck 1's cue 1
+      [Channel2] hotcue_1_activate 0x90    0x01    press = seek to + play deck 2's cue 1
+
+  Song B's entry point must be set as Mixxx hot cue 1 on whichever deck it's loaded on,
+  BEFORE running the simulator - see planner.py's docstring for why a hot cue (not a raw
+  seek) is used: it's the same button-press action the physical arm will eventually do.
+-->
+<MixxxMIDIPreset mixxxVersion="2.0.0+" schemaVersion="1">
+    <info>
+        <name>Robot DJ Sim Input</name>
+        <author>Robot DJ V2</author>
+        <description>Lets simulator.py drive the crossfader and trigger a deck's hot cue 1, for Phase 3's no-arm transition preview.</description>
+    </info>
+    <controller id="Robot DJ Sim Input">
+        <scriptfiles>
+        </scriptfiles>
+        <controls>
+            <control>
+                <group>[Master]</group>
+                <key>crossfader</key>
+                <status>0xB0</status>
+                <midino>0x10</midino>
+                <options>
+                    <normal/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>hotcue_1_activate</key>
+                <status>0x90</status>
+                <midino>0x00</midino>
+                <options>
+                    <button/>
+                </options>
+            </control>
+            <control>
+                <group>[Channel2]</group>
+                <key>hotcue_1_activate</key>
+                <status>0x90</status>
+                <midino>0x01</midino>
+                <options>
+                    <button/>
+                </options>
+            </control>
+        </controls>
+        <outputs>
+        </outputs>
+    </controller>
+</MixxxMIDIPreset>
