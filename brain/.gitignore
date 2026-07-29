@@ -1,0 +1,11 @@
+# Python virtual environment for the brain/ side — never commit this (hundreds of
+# library files, machine-specific). Recreate it with:
+#   python -m venv .venv ; .\.venv\Scripts\Activate.ps1 ; pip install -r requirements.txt
+.venv/
+
+# Compiled Python cache
+__pycache__/
+*.pyc
+
+# Local analysis output (generated per-song in Phase 2)
+analysis/

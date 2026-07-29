@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Robot DJ V2 - Mixxx output mapping definition.
+
+  This is the file Mixxx reads to list "Robot DJ Beat Feed" in the Controllers
+  dropdown. It does almost nothing itself: it just points Mixxx at the script
+  (RobotDJ_BeatFeed-scripts.js), which does all the work in a timer. There are no
+  <controls> (we don't read anything IN from a device) and no <outputs> (we send
+  our MIDI by hand from the script via midi.sendShortMsg, exactly like the stock
+  "MIDI for light" mapping does).
+-->
+<MixxxMIDIPreset mixxxVersion="2.0.0+" schemaVersion="1">
+    <info>
+        <name>Robot DJ Beat Feed</name>
+        <author>Robot DJ V2</author>
+        <description>Sends deck 1 &amp; 2 beat_distance (14-bit), BPM and play state as MIDI CC for the Python live beat feed (midi_cc_feed.py).</description>
+    </info>
+    <controller id="Robot DJ Beat Feed">
+        <scriptfiles>
+            <file filename="RobotDJ_BeatFeed-scripts.js" functionprefix="RobotDJBeatFeed"/>
+        </scriptfiles>
+        <controls>
+        </controls>
+        <outputs>
+        </outputs>
+    </controller>
+</MixxxMIDIPreset>
