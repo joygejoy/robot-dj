@@ -14,9 +14,9 @@
   using its standard 7-bit "normal" scaling (0..127 -> the control's own native range).
 
   CONTROL LAYOUT (must match simulator.py)
-  -----------------------------------------
+  =========================================
       control                      status  midino  meaning
-      ---------------------------  ------  ------  ----------------------------------
+      ===========================  ======  ======  ==================================
       [Master] crossfader          0xB0    0x10    0=full deck1 side .. 127=full deck2
       [Channel1] hotcue_1_activate 0x90    0x00    press = seek to + play deck 1's cue 1
       [Channel2] hotcue_1_activate 0x90    0x01    press = seek to + play deck 2's cue 1
