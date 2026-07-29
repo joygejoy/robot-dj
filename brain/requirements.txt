@@ -1,0 +1,20 @@
+# Robot DJ V2 - Phase 1 (brain/) Python dependencies.
+#
+# This file is ONLY for the "brain" (music-listening) side of the project. It is
+# completely separate from C:\robot-dj\hardware\software\requirements.txt, which
+# lists what the robot "body" needs (mecademicpy, etc.). Keeping them apart means
+# a machine that only listens to Mixxx doesn't have to install robot libraries,
+# and vice versa.
+#
+# Install everything here with, from inside C:\robot-dj\brain\ and with your
+# virtual environment active:
+#     pip install -r requirements.txt
+#
+# Note: phase_lock.py and test_phase_lock.py deliberately use ONLY the Python
+# standard library, so they need nothing below. These packages are only needed by
+# the "feed" scripts (live_feed.py, midi_feed.py) that actually talk to Mixxx.
+
+python-osc     # OSC transport (Option A, preferred): receive Mixxx's live beat/position over UDP.
+python-rtmidi  # Low-level MIDI backend that `mido` drives to read a virtual MIDI port (Option B).
+mido           # Friendly MIDI message layer used by midi_feed.py to read MIDI clock/beat (Option B).
+librosa        # Phase 2: offline audio analysis (bpm/beat/onset/energy) for analyzer.py.

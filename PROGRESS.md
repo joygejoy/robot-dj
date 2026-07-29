@@ -7,10 +7,49 @@
 
 ## START HERE NEXT SESSION
 
-**Where we are:** **Phase 1 GATE CONFIRMED.** The live beat feed's rate is locked to BPM —
-Phase 1 is done. Phase 2 (analyzer) is next.
+**Where we are:** Phase 1 is done. Phase 2's analyzer (`brain/analyzer.py`) is built and
+passes all 4 of its offline synthetic tests — **not yet validated against a real song file**.
 
-What changed this session:
+**Your immediate next action:** run `analyze()` on a real track and eyeball the output -
+does the bpm look right, do downbeats land where you'd tap "1", do the section boundaries
+line up with audible changes (a drop, a new layer coming in, a breakdown)? From
+`C:\robot-dj\brain` with the venv active:
+```powershell
+python -c "import json, analyzer; print(json.dumps(analyzer.analyze(r'PATH_TO_SONG.mp3'), indent=2))"
+```
+MP3 and WAV both work out of the box (soundfile 0.14's bundled libsndfile decodes MP3
+directly - no ffmpeg needed). If bpm/beats look right but downbeats or sections look off,
+the tuning constants at the top of `analyzer.py` (`BOUNDARY_ENERGY_RATIO`,
+`BOUNDARY_WINDOW_BEATS`, `PHRASE_BEATS`) are the first place to adjust.
+
+**What Phase 2 built this session:**
+- `brain/analyzer.py` - `analyze(path) -> {bpm, beats, downbeats, sections}`. Uses
+  `librosa.beat.beat_track` for bpm/beats; assumes 4/4 and picks whichever of the 4
+  possible beat-phases has the loudest average onset strength as "downbeat" (kick
+  drums usually land on beat 1); sections are found by testing a candidate boundary
+  every 32 beats (8 bars - the smaller of the two common EDM phrase lengths) and
+  keeping only the ones where energy actually changes by ≥40% - a quiet candidate
+  merges into its neighbor, which is how a real 16-bar phrase falls out without
+  having to guess 32 vs 64 up front. This replaces semantic section labels
+  (verse/chorus, which barely apply to instrumental dance music) with something
+  that actually matches how the genre is structured.
+- `brain/test_analyzer.py` - proves the math offline with a synthetic numpy "click
+  track" (no real song needed), same philosophy as `test_phase_lock.py`. Currently
+  passes 4/4. Caught two real bugs during development, both fixed:
+  1. Candidate section-boundary times must be computed analytically from bpm + the
+     first downbeat, NOT by indexing a fixed beat-COUNT ahead into the detected
+     `beats` array - the beat tracker can miss a handful of beats on sparse audio,
+     and indexing by count compounds that miscount into a growing time error.
+  2. A candidate boundary whose comparison window would run past the last real
+     beat (into trailing tail/silence) reads as a fake energy drop - it's the
+     track ending, not a structural change - so those candidates are now skipped.
+- Added `librosa` to `brain/requirements.txt` (already installed in the venv).
+
+Positions are expressed in beats-since-track-start, the same unit `phase_lock.py` uses
+for the live feed - so the planner (Phase 3) can eventually compare "the analyzer says
+the drop is at beat 128" against "PhaseLock says we're live at beat 127.3" directly.
+
+What changed the session before this (see "Key decisions" for the why, kept for context):
 - Ran the clean, lag-free rate check from the prior session's open question (pause/play/pause
   on deck 1, reading Mixxx time + the feed's `beat` value at each pause).
 - Readings: `T1 = 0:00.02`, `B1 = 1.00`; `T2 = 0:27.12`, `B2 = 41.65`; `bpm = 90.0`.
@@ -92,7 +131,7 @@ always keep up, 4. no anticipation of the arm's own movement time.
 |---|-------|------------------|--------|
 | 0 | Setup | Branch, Mixxx installed, FLX4↔Mixxx, brain/ env | ✅ done (FLX4 check deferred — not on hand) |
 | 1 | **Live feed** | Python reads Mixxx's live beat/position (the drift fix's foundation) | ✅ done — gate confirmed (rate matches BPM exactly, see top) |
-| 2 | Analyzer | `analyze(song) → {bpm, beats, downbeats, sections}` JSON | ⬜ next |
+| 2 | Analyzer | `analyze(song) → {bpm, beats, downbeats, sections}` JSON | 🔶 built, passes synthetic tests; **not yet validated on a real song** (see top) |
 | 3 | Planner + Simulator | Generate a transition routine and **hear it in Mixxx**, no arm | ⬜ |
 | 4 | Teach controls | Teach the arm the crossfader, channel faders, EQ/filter knobs, play/cue/SYNC buttons (no jog) | ⬜ physical |
 | 5 | Arm backend | Run the validated routine on the arm, timed by the live feed + per-action lead times | ⬜ |
@@ -109,7 +148,12 @@ Phase 4 (teaching) can happen in parallel at the hardware. Phase 5 joins the two
 - Conventions: branch from `main`; give the user git commands to run rather than committing
   for them; no hardcoded values / no editing env files; minimal changes only.
 
-## `brain/` file map (Phase 1)
+## `brain/` file map (Phase 1 + 2)
+
+- `analyzer.py` — Phase 2 core: `analyze(path) -> {bpm, beats, downbeats, sections}`.
+  See "START HERE" above for how it works and its tuning constants.
+- `test_analyzer.py` — offline proof via a synthetic click track (no real song needed).
+  Run: `python test_analyzer.py`. Currently passes 4/4.
 
 - `phase_lock.py` — core math: turns Mixxx's intermittent updates into a smooth live beat
   number. Standard-library only. **The correctness-critical piece.**
@@ -131,7 +175,8 @@ Phase 4 (teaching) can happen in parallel at the hardware. Phase 5 joins the two
 
 ## What's NOT built yet
 
-- Phase 2 analyzer, Phase 3 planner + simulator, Phase 4 new taught controls
-  (crossfader still not taught), Phase 5 feedback-driven arm executor.
+- Phase 2 analyzer validation against a real song (built, only synthetic-tested so far),
+  Phase 3 planner + simulator, Phase 4 new taught controls (crossfader still not taught),
+  Phase 5 feedback-driven arm executor.
 - Real per-action arm latencies and the planner's arm travel-time table (measured in Phase 5).
 - Knob `degrees_per_unit` is still a placeholder in `hardware/software/controls.json`.
