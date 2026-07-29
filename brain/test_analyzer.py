@@ -23,6 +23,8 @@ def make_click_track(
     downbeat_boost: float = 2.5,
     boundary_at_beat: int | None = None,
     boundary_boost: float = 3.0,
+    timbre_change_at_beat: int | None = None,
+    timbre_layer_amp: float = 0.25,
     lead_in_beats: int = 4,
     sr: int = SR,
 ) -> np.ndarray:
@@ -32,7 +34,26 @@ def make_click_track(
       landing on beat 1 of the bar.
     - If `boundary_at_beat` is given, every click from that beat onward is louder,
       simulating a real structural change (e.g. a new layer coming in) at that
-      exact beat - our ground truth for the section-boundary test.
+      exact beat - our ground truth for the energy-based section-boundary test.
+    - If `timbre_change_at_beat` is given, a quiet, CONTINUOUS higher-frequency
+      tone starts underneath the clicks from that beat's time onward and holds
+      through the end - simulating a new sustained instrument (a pad, a hi-hat
+      loop) entering, same as a real track. Quiet enough not to trip the
+      energy-ratio threshold - our ground truth for the spectral-only boundary
+      test, proving the MFCC path catches a structural change RMS energy alone
+      would miss (exactly the real-track gap this was added for - see
+      PROGRESS.md). It has to be CONTINUOUS, not another short click: two earlier
+      attempts used a second click (either replacing or layered onto the base
+      click) and both failed, for two different reasons worth recording - (1)
+      replacing the base click's frequency broke beat tracking for the whole back
+      half of the track (the tracker's onset detector barely registered the new
+      frequency as periodic), and (2) even layering a second click PRESERVED beat
+      tracking only while quiet, but a click is a ~30ms event inside a mostly
+      silent beat interval - the mean-MFCC comparison over an 8-beat window is
+      dominated by that silence either side of it, so a barely-there transient
+      doesn't move the average enough to be measurable. A sustained tone fills the
+      space between beats too, which is both more measurable AND closer to what a
+      real added instrument actually sounds like.
     - `lead_in_beats` of silence come before beat 0 (i.e. beat 0 does NOT start at
       sample 0). A click starting exactly at t=0 gives librosa's onset detector no
       run-up to lock its tempo/phase estimate onto, which cost several beats of
@@ -58,6 +79,11 @@ def make_click_track(
         start = int((i + lead_in_beats) * beat_interval * sr)
         end = min(start + click_len, n_samples)
         y[start:end] += (amp * base_click)[: end - start]
+
+    if timbre_change_at_beat is not None:
+        change_start = int((timbre_change_at_beat + lead_in_beats) * beat_interval * sr)
+        t_tail = np.arange(n_samples - change_start) / sr
+        y[change_start:] += timbre_layer_amp * np.sin(2 * np.pi * 3000.0 * t_tail)
 
     return y
 
@@ -128,6 +154,30 @@ def test_section_boundary_detected() -> bool:
     return ok
 
 
+def test_spectral_boundary_detected() -> bool:
+    print("test_spectral_boundary_detected")
+    true_bpm = 128.0
+    boundary_beat = PHRASE_BEATS * 2
+    n_beats = PHRASE_BEATS * 4
+    # timbre_layer_amp=0.02 is quiet enough to keep the energy ratio well under
+    # BOUNDARY_ENERGY_RATIO (empirically ~1.14, vs the 1.4 threshold) while still
+    # being clearly audible as a new spectral element - this is the exact scenario
+    # RMS-only detection missed on a real, mastered track.
+    y = make_click_track(
+        true_bpm, n_beats=n_beats, timbre_change_at_beat=boundary_beat, timbre_layer_amp=0.02
+    )
+    result = analyze_signal(y, SR)
+
+    boundaries = {s["start_beat"] for s in result["sections"]}
+    close_match = any(abs(b - boundary_beat) <= 2 for b in boundaries)
+
+    return _check(
+        f"a timbre-only change at beat {boundary_beat} is still detected "
+        f"(got starts: {sorted(boundaries)})",
+        close_match,
+    )
+
+
 def test_no_false_boundaries() -> bool:
     print("test_no_false_boundaries")
     true_bpm = 128.0
@@ -146,6 +196,7 @@ def main() -> None:
         test_bpm_and_beats,
         test_downbeat_phase,
         test_section_boundary_detected,
+        test_spectral_boundary_detected,
         test_no_false_boundaries,
     ]
     results = [t() for t in tests]

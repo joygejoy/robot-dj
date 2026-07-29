@@ -21,9 +21,17 @@ WHY DOWNBEATS AND SECTIONS ARE HEURISTICS, NOT EXACT ANSWERS
   to instrumental dance music), we lean on how EDM is actually structured: built in
   repeating 8-bar (32-beat) phrases, with real structural changes landing ON a phrase
   boundary. So we test a candidate boundary every 32 beats and keep only the ones
-  where the energy actually changes - a quiet candidate merges into its neighbor,
-  which is how a real 16-bar (64-beat) phrase naturally falls out without having to
-  guess 32 vs 64 up front.
+  that are a real change - a quiet candidate merges into its neighbor, which is how
+  a real 16-bar (64-beat) phrase naturally falls out without having to guess 32 vs
+  64 up front.
+- "Real change" is judged two ways, either one is enough: energy (RMS) jumping or
+  dropping, OR the timbre/spectral content (MFCC) shifting. Energy alone caught an
+  obvious drop/breakdown on a synthetic click track, but under-fired on a real,
+  commercially mastered song - modern dance music is heavily compressed, so overall
+  loudness barely moves across sections even when the actual instrumentation
+  changes completely (new bassline, hi-hats dropping out, a filter sweep). MFCC
+  distance catches that content change directly; energy still catches genuine
+  loudness-only moments (like a drum break-out) that MFCC might undersell.
 """
 import numpy as np
 import librosa
@@ -49,8 +57,35 @@ BOUNDARY_WINDOW_BEATS = 8
 # we treat it as the same section continuing and merge across it.
 BOUNDARY_ENERGY_RATIO = 1.4
 
-# Guard against divide-by-zero when a window is near-silent.
+# How many MFCC coefficients to compute. 13 is the standard default for timbre
+# comparison (enough to capture the coarse spectral shape - which instruments/
+# frequency bands are present - without chasing fine pitch detail we don't need).
+# Coefficient 0 is dropped before comparing (see _find_sections): it's essentially
+# log-energy/loudness, which the RMS check already covers separately, and its
+# magnitude is so much larger than the shape coefficients (1..12) that leaving it
+# in swamps cosine similarity - two windows that are 40% louder/quieter but
+# otherwise identical in timbre came out ~200x LESS different with it in than
+# without, which silently made the whole spectral check nearly blind.
+MFCC_COUNT = 13
+
+# A candidate boundary also counts as "real" if the cosine distance between the
+# mean MFCC vector before and after exceeds this. Cosine distance is 0 for
+# identical timbre and grows toward 1 as the spectral "shape" diverges.
+#
+# Picked empirically against a real track (Disclosure - She's Gone, Dance On),
+# NOT from the synthetic test - real, fully-produced music sits at a much smaller
+# scale than an isolated synthetic tone does (measured distances ranged ~0.0003 to
+# ~0.022 across the whole song, vs ~0.16+ for a synthetic added tone), because a
+# full mix's spectral envelope is already broad and complex, so one new element
+# moves the average far less. There was a visible gap in that track's numbers
+# between a "noise" cluster (<0.01) and a "real change" cluster (>0.013) - this
+# sits between them. Expect to retune as more real tracks get tested.
+BOUNDARY_SPECTRAL_DISTANCE = 0.015
+
+# Guard against divide-by-zero when a window is near-silent, or against a
+# zero-vector MFCC window (e.g. true digital silence) breaking cosine distance.
 _ENERGY_EPS = 1e-6
+_VECTOR_EPS = 1e-9
 
 
 def analyze(path: str) -> dict:
@@ -133,6 +168,9 @@ def _find_sections(
     """
     rms = librosa.feature.rms(y=y)[0]
     rms_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr)
+    # [1:] drops coefficient 0 (log-energy) - see MFCC_COUNT's comment for why.
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=MFCC_COUNT)[1:]
+    mfcc_times = librosa.frames_to_time(np.arange(mfcc.shape[1]), sr=sr)
     beat_seconds = 60.0 / bpm
     window_seconds = BOUNDARY_WINDOW_BEATS * beat_seconds
     track_end_time = float(rms_times[-1]) if len(rms_times) else float(beats[-1])
@@ -140,6 +178,21 @@ def _find_sections(
     def mean_energy(t_start: float, t_end: float) -> float:
         mask = (rms_times >= t_start) & (rms_times < t_end)
         return float(rms[mask].mean()) if mask.any() else 0.0
+
+    def mean_mfcc(t_start: float, t_end: float) -> np.ndarray | None:
+        mask = (mfcc_times >= t_start) & (mfcc_times < t_end)
+        return mfcc[:, mask].mean(axis=1) if mask.any() else None
+
+    def spectral_distance(before: np.ndarray | None, after: np.ndarray | None) -> float:
+        """Cosine distance between two mean-MFCC vectors: 0 = identical timbre,
+        growing toward 1 as spectral "shape" diverges."""
+        if before is None or after is None:
+            return 0.0
+        denom = np.linalg.norm(before) * np.linalg.norm(after)
+        if denom < _VECTOR_EPS:
+            return 0.0
+        cosine_similarity = float(np.dot(before, after) / denom)
+        return 1.0 - cosine_similarity
 
     def nearest_beat_index(t: float) -> int:
         return int(np.argmin(np.abs(beats - t)))
@@ -157,10 +210,22 @@ def _find_sections(
     confirmed_boundaries = [0]
     for k in range(1, n_candidates + 1):
         t = first_downbeat_time + k * phrase_seconds
-        before = mean_energy(t - window_seconds, t)
-        after = mean_energy(t, t + window_seconds)
-        ratio = after / max(before, _ENERGY_EPS)
-        if ratio >= BOUNDARY_ENERGY_RATIO or ratio <= 1.0 / BOUNDARY_ENERGY_RATIO:
+
+        energy_before = mean_energy(t - window_seconds, t)
+        energy_after = mean_energy(t, t + window_seconds)
+        energy_ratio = energy_after / max(energy_before, _ENERGY_EPS)
+        is_energy_change = (
+            energy_ratio >= BOUNDARY_ENERGY_RATIO
+            or energy_ratio <= 1.0 / BOUNDARY_ENERGY_RATIO
+        )
+
+        mfcc_before = mean_mfcc(t - window_seconds, t)
+        mfcc_after = mean_mfcc(t, t + window_seconds)
+        is_spectral_change = (
+            spectral_distance(mfcc_before, mfcc_after) >= BOUNDARY_SPECTRAL_DISTANCE
+        )
+
+        if is_energy_change or is_spectral_change:
             confirmed_boundaries.append(nearest_beat_index(t))
     confirmed_boundaries.append(len(beats))
 
