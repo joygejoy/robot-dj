@@ -7,20 +7,28 @@
 
 ## START HERE NEXT SESSION
 
-**Where we are:** Phase 1 is done. Phase 2's analyzer (`brain/analyzer.py`) is built and
-passes all 4 of its offline synthetic tests — **not yet validated against a real song file**.
+**Where we are:** **Phase 1 AND Phase 2 are done.** Phase 3 (planner + simulator) is next.
 
-**Your immediate next action:** run `analyze()` on a real track and eyeball the output -
-does the bpm look right, do downbeats land where you'd tap "1", do the section boundaries
-line up with audible changes (a drop, a new layer coming in, a breakdown)? From
-`C:\robot-dj\brain` with the venv active:
-```powershell
-python -c "import json, analyzer; print(json.dumps(analyzer.analyze(r'PATH_TO_SONG.mp3'), indent=2))"
-```
-MP3 and WAV both work out of the box (soundfile 0.14's bundled libsndfile decodes MP3
-directly - no ffmpeg needed). If bpm/beats look right but downbeats or sections look off,
-the tuning constants at the top of `analyzer.py` (`BOUNDARY_ENERGY_RATIO`,
-`BOUNDARY_WINDOW_BEATS`, `PHRASE_BEATS`) are the first place to adjust.
+Phase 2's analyzer (`brain/analyzer.py`) passes all 5 offline synthetic tests and has been
+validated against 4 real files. bpm/beats/downbeats check out cleanly on all of them.
+Section boundaries look musically plausible on every track tried so far:
+- **Disclosure - She's Gone, Dance On** (full track, 3:47): 6 sections - a clean build
+  (0.15→0.25→0.37 energy) over the first minute, a breakdown dip back to 0.15 at 0:59,
+  a rise, then one long final section (1:27 to end) at moderate-high energy.
+- **01 Losing It**, **01 One More Time**, **01 Fail-safe**: all three are, surprisingly,
+  genuinely only 60 seconds of audio each (confirmed by inspecting the loaded waveform,
+  not a loading bug - likely preview clips, unlike the Disclosure file which came from a
+  YouTube "Visualizer" rip and is the full song). Each still produced a sensible energy
+  shape (quiet→loud→quiet, or a steady build).
+
+**Open item carried into Phase 3:** most of the test files in `C:\music` are 60s previews,
+not full tracks. Phase 3's planner needs real material around an actual transition point,
+so get full-length versions of whichever two songs you want the first transition routine
+built from before relying on this for a real test.
+
+If section boundaries ever look off on a new track, the tuning constants at the top of
+`analyzer.py` (`BOUNDARY_ENERGY_RATIO`, `BOUNDARY_SPECTRAL_DISTANCE`, `BOUNDARY_WINDOW_BEATS`,
+`PHRASE_BEATS`) are the first place to adjust.
 
 **What Phase 2 built this session:**
 - `brain/analyzer.py` - `analyze(path) -> {bpm, beats, downbeats, sections}`. Uses
@@ -28,14 +36,41 @@ the tuning constants at the top of `analyzer.py` (`BOUNDARY_ENERGY_RATIO`,
   possible beat-phases has the loudest average onset strength as "downbeat" (kick
   drums usually land on beat 1); sections are found by testing a candidate boundary
   every 32 beats (8 bars - the smaller of the two common EDM phrase lengths) and
-  keeping only the ones where energy actually changes by ≥40% - a quiet candidate
-  merges into its neighbor, which is how a real 16-bar phrase falls out without
-  having to guess 32 vs 64 up front. This replaces semantic section labels
-  (verse/chorus, which barely apply to instrumental dance music) with something
-  that actually matches how the genre is structured.
+  keeping only the ones that are a real change - a quiet candidate merges into its
+  neighbor, which is how a real 16-bar phrase falls out without having to guess 32
+  vs 64 up front. This replaces semantic section labels (verse/chorus, which barely
+  apply to instrumental dance music) with something that matches how the genre is
+  actually structured.
+- **"Real change" is judged two ways** (either is enough): energy (RMS) jumping/
+  dropping ≥40%, OR MFCC-based timbre distance exceeding a threshold. Energy alone
+  caught an obvious drop on a synthetic click track but **under-fired on the real
+  Disclosure track tested this session** - found only 1 boundary in a 226s song.
+  Root cause: modern dance music is heavily compressed/limited, so overall loudness
+  barely moves between sections even when the actual instrumentation changes
+  completely. MFCC timbre distance was added to catch that. Getting it right took
+  two real bugs, both fixed:
+  1. MFCC coefficient 0 is essentially log-energy/loudness, and its magnitude so
+     dominates the vector that it swamped cosine similarity to near-zero
+     sensitivity - two windows 40% louder/quieter but otherwise identical in timbre
+     came out ~200x LESS different with it in than without. Fixed by dropping
+     coefficient 0 before comparing (RMS already covers loudness separately).
+  2. The synthetic test for this needed a CONTINUOUS added tone, not another short
+     click - a ~30ms transient inside a mostly-silent beat interval doesn't move an
+     8-beat mean-MFCC average enough to be measurable, and a loud-enough second
+     click confused the beat tracker entirely. A quiet sustained tone (simulating a
+     new instrument/pad/hi-hat loop entering) fixed both problems.
+  3. `BOUNDARY_SPECTRAL_DISTANCE` had to be recalibrated against the real track:
+     synthetic testing suggested ~0.08, but real distances on a full mix sit at a
+     much smaller scale (~0.0003-0.022 measured) since a complex mix's spectral
+     envelope barely shifts when one new element enters, compared to an isolated
+     synthetic tone. Set to 0.015 based on a visible gap in that track's numbers -
+     expect to retune as more real tracks get tested.
+  - Result on the Disclosure track: went from 1 detected section to 6, including a
+    clear quiet dip (energy 0.15) right after the loudest stretch (energy 0.37) -
+    consistent with a buildup-into-breakdown moment.
 - `brain/test_analyzer.py` - proves the math offline with a synthetic numpy "click
   track" (no real song needed), same philosophy as `test_phase_lock.py`. Currently
-  passes 4/4. Caught two real bugs during development, both fixed:
+  passes 5/5. Also caught two earlier bugs, both fixed:
   1. Candidate section-boundary times must be computed analytically from bpm + the
      first downbeat, NOT by indexing a fixed beat-COUNT ahead into the detected
      `beats` array - the beat tracker can miss a handful of beats on sparse audio,
@@ -43,6 +78,10 @@ the tuning constants at the top of `analyzer.py` (`BOUNDARY_ENERGY_RATIO`,
   2. A candidate boundary whose comparison window would run past the last real
      beat (into trailing tail/silence) reads as a fake energy drop - it's the
      track ending, not a structural change - so those candidates are now skipped.
+- Tested against two real files: "Disclosure - She's Gone, Dance On" (bpm 133.9,
+  472 beats, 6 sections after the spectral fix) and "01 Fail-safe" (bpm 139.7 - note
+  this file is genuinely only 60 seconds of audio, confirmed by inspecting its
+  loaded waveform, not a loading bug).
 - Added `librosa` to `brain/requirements.txt` (already installed in the venv).
 
 Positions are expressed in beats-since-track-start, the same unit `phase_lock.py` uses
@@ -131,7 +170,7 @@ always keep up, 4. no anticipation of the arm's own movement time.
 |---|-------|------------------|--------|
 | 0 | Setup | Branch, Mixxx installed, FLX4↔Mixxx, brain/ env | ✅ done (FLX4 check deferred — not on hand) |
 | 1 | **Live feed** | Python reads Mixxx's live beat/position (the drift fix's foundation) | ✅ done — gate confirmed (rate matches BPM exactly, see top) |
-| 2 | Analyzer | `analyze(song) → {bpm, beats, downbeats, sections}` JSON | 🔶 built, passes synthetic tests; **not yet validated on a real song** (see top) |
+| 2 | Analyzer | `analyze(song) → {bpm, beats, downbeats, sections}` JSON | ✅ done — validated on 4 real files, sections musically plausible (see top) |
 | 3 | Planner + Simulator | Generate a transition routine and **hear it in Mixxx**, no arm | ⬜ |
 | 4 | Teach controls | Teach the arm the crossfader, channel faders, EQ/filter knobs, play/cue/SYNC buttons (no jog) | ⬜ physical |
 | 5 | Arm backend | Run the validated routine on the arm, timed by the live feed + per-action lead times | ⬜ |
@@ -153,7 +192,7 @@ Phase 4 (teaching) can happen in parallel at the hardware. Phase 5 joins the two
 - `analyzer.py` — Phase 2 core: `analyze(path) -> {bpm, beats, downbeats, sections}`.
   See "START HERE" above for how it works and its tuning constants.
 - `test_analyzer.py` — offline proof via a synthetic click track (no real song needed).
-  Run: `python test_analyzer.py`. Currently passes 4/4.
+  Run: `python test_analyzer.py`. Currently passes 5/5.
 
 - `phase_lock.py` — core math: turns Mixxx's intermittent updates into a smooth live beat
   number. Standard-library only. **The correctness-critical piece.**
@@ -175,8 +214,7 @@ Phase 4 (teaching) can happen in parallel at the hardware. Phase 5 joins the two
 
 ## What's NOT built yet
 
-- Phase 2 analyzer validation against a real song (built, only synthetic-tested so far),
-  Phase 3 planner + simulator, Phase 4 new taught controls (crossfader still not taught),
+- Phase 3 planner + simulator, Phase 4 new taught controls (crossfader still not taught),
   Phase 5 feedback-driven arm executor.
 - Real per-action arm latencies and the planner's arm travel-time table (measured in Phase 5).
 - Knob `degrees_per_unit` is still a placeholder in `hardware/software/controls.json`.
