@@ -7,13 +7,22 @@
 
 ## START HERE NEXT SESSION
 
-**Where we are:** Phase 1, Phase 2, and BOTH halves of Phase 3 (planner + simulator) are
-built and **the Python→Mixxx smoke test now passes on live Mixxx**: a raw CC sweep sent
-from Python over the new `RobotDJSim` port moved Mixxx's crossfader smoothly full-left to
-full-right. The MIDI pipe in both directions (beat feed out, simulator control in) is
-confirmed working. What's left is the full end-to-end run with real songs (never done yet).
+**Where we are: Phase 3 is fully validated end-to-end against live Mixxx.** Two
+full-length, tempo-matched tracks - **Disclosure - She's Gone, Dance On** (133.9 bpm) into
+**ANOTR ft. 54 Ultra - Talk To You** (130.8 bpm, 2.3% mismatch, under the 3% ceiling) - were
+analyzed, planned (crossfade starting at song A beat 195 / ~87.5s, 32 beats / 8 bars long,
+entering song B at its hot cue 1 set at beat 0), and run live: the simulator tracked deck
+1's real beat via the Phase 1 feed, and when it crossed beat 195 it faded the crossfader
+from full-A to full-B over 32 beats and fired deck 2's hot cue at the right moment. **Heard
+and confirmed working by ear.** This is the first real proof the whole brain pipeline
+(analyze → plan → watch live beat → drive Mixxx) works, not just offline math.
 
-**Two things fixed to get here, worth knowing about:**
+**Next up: Phase 4 (teach controls)** - the crossfader, channel faders, EQ/filter knobs,
+and play/cue/SYNC buttons need to be physically taught to the MECA500 arm on the real
+DDJ-FLX4. This is hardware work, no brain code needed, and can happen independently of
+anything else. See the Phases table below for what Phase 4 covers.
+
+**Two things fixed along the way this session, worth knowing about:**
 - `mixxx_mapping/RobotDJ_SimInput.midi.xml` failed to load with `Expected '>', but got
   '-'. at line 17, column 5` - the file's own comment block used `----` dashed lines as a
   table separator, but XML forbids a literal `--` anywhere inside a comment. Fixed by
@@ -29,19 +38,35 @@ confirmed working. What's left is the full end-to-end run with real songs (never
   ```
   and use whatever full names come back.
 
-**Next action - the full end-to-end test** (do this once you have two tempo-matched,
-full-length tracks - most files tried so far were 60s previews, see Phase 2's notes
-below):
-1. Load song A on deck 1, playing; load song B on deck 2, cued, with **hot cue 1 set at
-   its intended entry point**; make sure both decks are tempo-matched (Mixxx SYNC).
-2. Confirm current port names (see above), then generate a routine and run the simulator:
-   ```powershell
-   python -c "import json, analyzer, planner; a = analyzer.analyze(r'SONG_A.mp3'); b = analyzer.analyze(r'SONG_B.mp3'); r = planner.plan_transition(a, b, start_beat_a=SOME_BEAT); json.dump(r, open('routine.json', 'w'))"
-   python simulator.py --routine routine.json --beat-feed-port "MixxBeat 1" --sim-port "RobotDJSim 2"
-   ```
-   (substitute whatever port names `mido.get_output_names()` actually shows)
-3. Listen: does the crossfade move smoothly, does song B's hot cue fire at the right
-   moment, does the mix sound reasonable?
+**A third thing worth knowing, hit during the live run:** if Mixxx has no audio, check
+**Preferences → Sound Hardware** before suspecting the MIDI pipeline. Two real issues hit
+this session, neither related to the brain code:
+- **Realtek ASIO failed with "unanticipated host error"** - consumer Realtek chips'
+  bundled ASIO driver is often flaky/exclusive-access-only. Fix: switch the Sound Hardware
+  **API** dropdown from ASIO to **WASAPI** (or DirectSound if WASAPI misbehaves) - a plain
+  playback test doesn't need ASIO's low latency.
+- **"invalid sampling rate"** after switching to WASAPI - Mixxx's **Sample Rate** setting
+  didn't match Windows' configured default format for the device. Fix: Windows Sound
+  Settings → Playback → device → Properties → Advanced tab → note the **Default Format**
+  (e.g. "16 bit, 44100 Hz"), then set Mixxx's Sample Rate to match exactly.
+
+**The exact commands used for the validated run** (kept as a template for the next
+transition - remember port names and beat numbers will differ next time):
+```powershell
+python -c "import mido; print(mido.get_output_names()); print(mido.get_input_names())"  # confirm current port names first - they drift across sessions, see above
+python -c "
+import json, analyzer, planner
+a = analyzer.analyze(r'C:/music/Disclosure - She's Gone, Dance On (Visualizer).mp3')
+b = analyzer.analyze(r'C:/music/ANOTR ft. 54 Ultra - Talk To You [No Art].mp3')
+r = planner.plan_transition(a, b, start_beat_a=195, entry_beat_b=0, crossfade_beats=32, hotcue_b=1)
+json.dump(r, open('routine.json', 'w'), indent=2)
+"
+python simulator.py --routine routine.json --beat-feed-port "MixxBeat 0" --sim-port "RobotDJSim 2" --song-a-deck 1 --song-b-deck 2
+```
+Note the beat-feed port came from `get_input_names()` (simulator reads it as MIDI input)
+while the sim port came from `get_output_names()` (simulator writes to it as MIDI output) -
+loopMIDI gives each virtual port's two directions different trailing numbers, so don't
+assume they match.
 
 **What Phase 3 built this session:**
 - `brain/planner.py` - `plan_transition(song_a, song_b, start_beat_a, entry_beat_b,
@@ -60,17 +85,16 @@ below):
   direction from `RobotDJ_BeatFeed`, which is output-only). Purely declarative (no
   companion JS needed, unlike the beat feed - a plain CC/note passthrough doesn't need a
   polling timer): CC 0x10 → `[Master] crossfader`, note 0x00 → `[Channel1]
-  hotcue_1_activate`, note 0x01 → `[Channel2] hotcue_1_activate`. **Not yet installed or
-  loaded in Mixxx - see "your immediate next action" above.**
+  hotcue_1_activate`, note 0x01 → `[Channel2] hotcue_1_activate`. **Installed, loaded, and
+  proven live** - see "START HERE" above.
 - `brain/simulator.py` - `run(routine, beat_feed_port, sim_port, song_a_deck,
   song_b_deck)`. Watches song A's LIVE beat over the existing Phase 1 feed (reuses
   `midi_cc_feed.CcBeatReader` directly rather than re-decoding CCs) and drives the
   crossfader + song B's hot cue accordingly - the same "awareness over blind timing"
   principle Phase 1 exists for, applied here instead of to the eventual arm. The
   interpolation math (`crossfader_value_at`, `to_midi_cc`) is split out into pure,
-  fully-offline-testable functions, same pattern as `phase_lock.py` vs `midi_cc_feed.py` -
-  the live loop itself genuinely can't be unit-tested without a real Mixxx, which is
-  exactly the gap the smoke test above is for.
+  fully-offline-testable functions, same pattern as `phase_lock.py` vs `midi_cc_feed.py`.
+  **Proven live this session** - see "START HERE" above for the full validated run.
 - `brain/test_simulator.py` - 7/7 passing, proves the interpolation math (holds before/
   after the fade, linear in between, correct MIDI byte conversion, clamps out-of-range
   input) without needing Mixxx or MIDI hardware.
@@ -229,12 +253,13 @@ always keep up, 4. no anticipation of the arm's own movement time.
 | 0 | Setup | Branch, Mixxx installed, FLX4↔Mixxx, brain/ env | ✅ done (FLX4 check deferred — not on hand) |
 | 1 | **Live feed** | Python reads Mixxx's live beat/position (the drift fix's foundation) | ✅ done — gate confirmed (rate matches BPM exactly, see top) |
 | 2 | Analyzer | `analyze(song) → {bpm, beats, downbeats, sections}` JSON | ✅ done — validated on 4 real files, sections musically plausible (see top) |
-| 3 | Planner + Simulator | Generate a transition routine and **hear it in Mixxx**, no arm | 🔶 built + offline-tested + MIDI smoke test passes on live Mixxx; **full end-to-end run with real songs not yet done** (see top) |
-| 4 | Teach controls | Teach the arm the crossfader, channel faders, EQ/filter knobs, play/cue/SYNC buttons (no jog) | ⬜ physical |
+| 3 | Planner + Simulator | Generate a transition routine and **hear it in Mixxx**, no arm | ✅ done — full end-to-end run against live Mixxx with two real full-length tracks, heard and confirmed working (see top) |
+| 4 | Teach controls | Teach the arm the crossfader, channel faders, EQ/filter knobs, play/cue/SYNC buttons (no jog) | ⬜ physical — next up |
 | 5 | Arm backend | Run the validated routine on the arm, timed by the live feed + per-action lead times | ⬜ |
 
-**Critical path:** Phase 1's gate is confirmed. Phases 2–3 (brain + simulator) need no arm.
-Phase 4 (teaching) can happen in parallel at the hardware. Phase 5 joins the two proven halves.
+**Critical path:** Phases 1–3 (the whole brain: live feed, analyzer, planner, simulator)
+are done and validated. Phase 4 (teaching) is next, physical, and can happen independently
+of any more brain work. Phase 5 joins the two proven halves.
 
 ## Repo layout & conventions
 
@@ -257,7 +282,7 @@ Phase 4 (teaching) can happen in parallel at the hardware. Phase 5 joins the two
   `python test_planner.py`. Currently passes 5/5.
 - `simulator.py` — Phase 3 core (simulator half): `run(routine, ...)`. Executes a routine
   live in Mixxx - watches song A's real beat over the existing Phase 1 feed, drives the
-  crossfader + song B's hot cue over a NEW MIDI port. **Not yet run against live Mixxx.**
+  crossfader + song B's hot cue over a NEW MIDI port. **Validated against live Mixxx.**
 - `test_simulator.py` — offline proof of the interpolation math only (the live loop can't
   be unit-tested - needs real Mixxx). Run: `python test_simulator.py`. Passes 7/7.
 - `mixxx_mapping/RobotDJ_SimInput.midi.xml` — the new Mixxx **input** mapping simulator.py
@@ -288,9 +313,10 @@ Phase 4 (teaching) can happen in parallel at the hardware. Phase 5 joins the two
 
 ## What's NOT built yet
 
-- Phase 3 validated end-to-end against live Mixxx (code is written and offline-tested,
-  but the smoke test + full run at the top of this file haven't happened yet - do those
-  first before trusting the simulator), Phase 4 new taught controls (crossfader still not
-  taught), Phase 5 feedback-driven arm executor.
+- Phase 4 new taught controls (crossfader, channel faders, EQ/filter knobs, play/cue/SYNC
+  buttons still not taught to the arm), Phase 5 feedback-driven arm executor.
 - Real per-action arm latencies and the planner's arm travel-time table (measured in Phase 5).
 - Knob `degrees_per_unit` is still a placeholder in `hardware/software/controls.json`.
+- Only crossfader + volume are in the routine so far (v1 scope, by design - see
+  `planner.py`'s docstring); EQ swaps and more sophisticated transition types are future
+  work once Phase 4/5 prove the basic pipeline on the arm.
