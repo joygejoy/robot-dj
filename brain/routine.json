@@ -1,0 +1,25 @@
+{
+  "song_a": {
+    "bpm": 133.92857142857142,
+    "start_beat": 195,
+    "start_time": 87.456
+  },
+  "song_b": {
+    "bpm": 130.8139534883721,
+    "entry_beat": 0,
+    "entry_time": 0.14933333333333335,
+    "hotcue": 1
+  },
+  "crossfade_beats": 32,
+  "crossfader_keyframes": [
+    {
+      "beat": 195,
+      "position": 0.0
+    },
+    {
+      "beat": 227,
+      "position": 1.0
+    }
+  ],
+  "trigger_song_b_at_beat": 195
+}
