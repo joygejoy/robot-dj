@@ -7,6 +7,54 @@
 
 ## START HERE NEXT SESSION
 
+**Where we are: V1's `song_script.json` ran successfully end-to-end on the real
+robot for the first time this session** (`python runner.py` from
+`hardware/software/`) - the full ~33s choreography (right_mid knob, right_volume
+fader drag, left_play/right_play buttons, left_filter knob with a 3s min-duration
+turn) executed against the real DDJ-FLX4 with no incidents. This is the first proof
+this specific choreography works on real hardware, not just via individual
+`test_actions.py` checks. The board's physical position relative to the robot was
+confirmed unmoved via a `test_actions.py move-to` pre-flight check first.
+
+**One tweak made after the run:** `right_play_press` was adjusted 2mm deeper in X
+(`python derive_position.py right_play_press right_play_press --axis x --relative 2`,
+overwriting it in place, same Y/Z/orientation) - saved to `positions.json`, not
+independently re-verified with a second `test_actions.py press-button` run per user's
+call, so keep an eye on it next time `right_play` is used for real.
+
+**No code/software changes were needed for either of the above** - the V1
+choreography only ever uses controls that were already taught (V1-era: `right_mid`,
+`right_volume`, `left_play`, `right_play`, `left_filter`), so this was purely a
+hardware-run-and-tweak session with no changes to `meca_controller.py`,
+`test_actions.py`, `derive_position.py`, or `controls.json` beyond what the previous
+session already committed (see the Phase 4 subsection below). `positions.json` is the
+only file that changed (the `right_play_press` depth).
+
+**Next up, in rough priority order:**
+1. **Phase 5 (feedback-driven arm executor)** - the real next milestone. The
+   crossfader is taught (previous session) and V1's basic choreography now runs on
+   real hardware (this session) - the missing piece is code that reads the live Mixxx
+   beat feed and drives `meca_controller` the same way `simulator.py` drives Mixxx's
+   MIDI input, instead of blind wall-clock timing. This is what actually proves V2's
+   core thesis (live-beat-aware execution fixes V1's drift) on the arm.
+2. **Phase 4 remainder (optional, not blocking)** - the deferred EQ/filter knobs, and
+   another attempt at `right_sync_press` with a different gripper approach angle, if
+   a future choreography ends up needing either.
+3. **Wire the new controls into an actual choreography** - crossfader, left_volume,
+   and the 3 taught cue/sync buttons are taught+wired but not yet used in any
+   `song_script.json`-style routine; likely happens naturally once Phase 5 generates
+   real arm routines from the planner's output instead of hand-authored JSON.
+
+**Repo state:** everything from the previous teaching session is committed
+(`5fd3cce`). Only `hardware/software/positions.json` (the `right_play_press` tweak) is
+uncommitted right now. `brain/_analysis_a.json`, `brain/_analysis_b.json`,
+`brain/routine.json` are still untracked leftovers from the Phase 3 live-run session -
+unchanged, still awaiting a decision on whether to commit or discard them.
+
+---
+
+### Phase 4 — teaching session details (previous session, kept for detail)
+
 **Where we are: Phase 4 (teach controls) is partially done.** Taught and wired this
 session: the **crossfader** (both endpoints + hovers, registered in `controls.json` as
 a `slider` control for `move_slider()`), the **left channel fader** (`left_volume_top`/
