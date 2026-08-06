@@ -44,6 +44,14 @@ HOVER_FOR = {
     "right_play_press": "right_play_hover",
     "left_play_press": "left_play_hover",
     "left_filter_engage": "left_filter_hover",
+    "crossfader_left": "crossfader_left_hover",
+    "crossfader_right": "crossfader_right_hover",
+    "left_volume_top": "left_volume_top_hover",
+    "left_volume_75": "left_volume_75_hover",
+    "left_volume_half": "left_volume_half_hover",
+    "right_cue_press": "right_cue_press_hover",
+    "left_cue_press": "left_cue_press_hover",
+    "left_sync_press": "left_sync_press_hover",
 }
 
 

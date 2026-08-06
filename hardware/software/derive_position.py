@@ -28,6 +28,8 @@ import json
 import os
 from mecademicpy.robot import Robot
 
+from meca_controller import SAFE_X
+
 ROBOT_IP = "192.168.0.100"
 POSITIONS_FILE = os.path.join(os.path.dirname(__file__), "positions.json")
 AXIS_INDEX = {"x": 0, "y": 1, "z": 2}
@@ -109,14 +111,36 @@ def main():
                 target_pose[axis_index] = args.absolute
 
             input(
-                f"About to move to 'home', then 'safe_hover', then straight-line "
-                f"(MoveLin) to the pose computed from '{args.from_pose}' with "
+                f"About to move to 'home', then 'safe_hover', then cross to X="
+                f"{SAFE_X} (the standard safe standoff), then Y/Z/orientation to "
+                f"match '{args.from_pose}', then dive to the pose computed with "
                 f"{args.axis.upper()} changed: {[round(v, 2) for v in target_pose]}. "
                 "Board clear, hand near e-stop? Press Enter to continue..."
             )
             robot.MoveJoints(*positions["home"]["joints"])
             robot.WaitIdle()
             robot.MoveJoints(*positions["safe_hover"]["joints"])
+            robot.WaitIdle()
+
+            # safe_hover has no stored Cartesian pose (never taught/verified),
+            # so its real X depth is unknown - don't trust it as the start of
+            # a compound MoveLin. Instead: (1) match X to the codebase's one
+            # verified safe standoff via a pure single-axis move (always safe,
+            # same reasoning as move_to()'s retract step), (2) cross in Y/Z/
+            # orientation to match the target while STILL at that safe depth,
+            # (3) dive to the target's actual depth as a final pure-X move
+            # (safe because Y/Z/orientation already match) - the same
+            # retract/cross/dive shape move_to() uses for known positions,
+            # generalized to a target whose depth was only just computed.
+            current_pose = robot.GetPose()
+            safe_standoff = list(current_pose)
+            safe_standoff[0] = SAFE_X
+            robot.MoveLin(*safe_standoff)
+            robot.WaitIdle()
+
+            crossed_pose = list(target_pose)
+            crossed_pose[0] = SAFE_X
+            robot.MoveLin(*crossed_pose)
             robot.WaitIdle()
 
             robot.MoveLin(*target_pose)

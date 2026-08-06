@@ -1,11 +1,118 @@
 # Robot DJ — V2 Progress & Plan
 
 > **Purpose of this file:** the single place that says where V2 stands and what to do
-> next. Read the "START HERE NEXT SESSION" block first. Last updated: **2026-07-29**.
+> next. Read the "START HERE NEXT SESSION" block first. Last updated: **2026-08-05**.
 
 ---
 
 ## START HERE NEXT SESSION
+
+**Where we are: Phase 4 (teach controls) is partially done.** Taught and wired this
+session: the **crossfader** (both endpoints + hovers, registered in `controls.json` as
+a `slider` control for `move_slider()`), the **left channel fader** (`left_volume_top`/
+`_75`/`_half` + hovers, same directly-taught convention as `right_volume` - no
+`controls.json` entry needed), and three of four **cue/sync buttons**
+(`right_cue_press`, `left_cue_press`, `left_sync_press` + hovers). All of these are
+wired into `meca_controller.py`'s `HOVER_FOR` and (for the buttons) `test_actions.py`'s
+`BUTTONS` dict, so each can be smoke-tested individually:
+```powershell
+python test_actions.py move-to <position_name>       # e.g. left_volume_top - hover only, no dive
+python test_actions.py press-button <right_cue|left_cue|left_sync>
+```
+
+**Deliberately skipped this session:** the remaining EQ/filter knobs (`left_mid`,
+`right_filter`, `right_eq_hi`, `left_eq_hi`, `right_eq_low`, `left_eq_low`) - not
+blocking anything the planner currently uses (it only ever emits crossfader + hotcue
+actions), so teaching them was deferred rather than done. Revisit whenever a
+choreography actually needs EQ moves.
+
+**Blocked, not a bug: `right_sync_press` could not be taught.** Confirmed with the
+user - the gripper cannot physically reach the right deck's SYNC button (mechanical
+interference at that spot on the board). Not a software problem; would need a
+different approach angle or a fixture change to revisit. Left untaught.
+
+**This unblocks Phase 5's first real target:** the crossfader is now taught, so the
+Disclosure -> ANOTR routine validated live in Mixxx during the Phase 3 session could,
+in principle, be attempted on the real arm next - but Phase 5 (the feedback-driven arm
+executor that reads the live beat and drives `meca_controller` instead of the
+simulator's MIDI output) hasn't been built yet. Teaching is necessary but not
+sufficient on its own.
+
+**Several real bugs were found and fixed in the teaching tools this session** (not in
+the brain/analysis code - these are all in `hardware/software/`):
+1. **`derive_position.py` caused a real collision** (crashed into a knob). Its
+   non-reference branch did ONE compound `MoveLin` from `safe_hover` - whose own
+   Cartesian pose was never taught/verified (`pose: null` in `positions.json`) -
+   straight to a newly-computed working-depth target, changing X/Y/Z/orientation all
+   at once. If `safe_hover`'s real depth was closer to the board than assumed, the
+   whole path stayed too close the entire time. **Fixed** by splitting it into the
+   same retract/cross/dive shape `meca_controller.move_to()` already uses for known
+   positions: (1) a pure X-only move to the imported `SAFE_X` constant, (2) a
+   `MoveLin` crossing Y/Z/orientation to match the target while still held at
+   `SAFE_X`, (3) a final pure-X dive to the target's actual depth (safe because Y/Z/
+   orientation already match by that point). `derive_position.py` now imports
+   `SAFE_X` from `meca_controller` instead of a second hardcoded `175`.
+2. **Even with that fix, a freshly-computed `MoveLin` target can still legitimately
+   fail** - `MX_ST_OUT_OF_REACH` (hit deriving `crossfader_left_hover`) and
+   `MX_ST_SINGULARITY_ERR` (hit deriving `left_volume_top_hover` - likely because
+   `left_volume`'s Y≈-30 sits close enough to the arm's centerline for that
+   orientation to create a wrist singularity, unlike `right_volume`'s Y≈-75). Both
+   are genuine kinematic limits, not code bugs - and both times the robot refused the
+   move cleanly with no collision. The fix each time was to abandon
+   `derive_position.py` for that one hover and just physically jog + `teach.py` it
+   directly instead. **Takeaway: if `derive_position.py` faults on a brand-new area of
+   the workspace, don't retry the math - just teach the hover directly.**
+3. **`test_actions.py`'s `cmd_move_to` had a latent safety-check bug that caused a
+   second real collision** (drove into the board). `HOVER_FOR.get(name, name)`
+   silently falls back to the position's own name whenever no hover is registered for
+   it - which trivially passes the "target in mc.positions" check whenever the working
+   position itself is already taught (which it always is, by definition, once you've
+   run `teach.py` on it). This let `python test_actions.py move-to left_volume_top`
+   slip through and do a raw `MoveJoints` straight into the board, because
+   `left_volume_top_hover` hadn't been added to `HOVER_FOR` yet at that point. **Fixed:**
+   `cmd_move_to` now requires either an explicit `HOVER_FOR` entry, or that `name` is
+   itself already a hover/reference position (ends with `_hover`, or is `home`/
+   `safe_hover`) - anything else is rejected with a clear error instead of silently
+   "working."
+4. **New standing procedural rule (can't be fixed in code):** reconnecting to the robot
+   (`derive_position.py`, `test_actions.py`, `runner.py` - anything through
+   `MecaController`/`Robot()`) always calls the robot's own factory `Home()` routine
+   first, which has zero awareness of the external DJ controller board. Starting that
+   from an engaged/deep position can crash into the board, and this can't be checked in
+   code - pose reads aren't meaningful before homing completes. **Always manually
+   retract the gripper to a board-clear pose via the web UI before running any script
+   that reconnects.**
+5. **Two teaching mistakes, caught by comparing recorded numbers before trusting
+   them (not code bugs):** `left_volume_top` was first saved as an exact duplicate of
+   `crossfader_right_hover` (the gripper hadn't actually moved before `teach.py` ran) -
+   caught by comparing pose values, re-taught. Its second teach also landed ~15mm too
+   high in Z vs. `right_volume_top`'s reference height (89.15 vs 87.965 the second
+   time - much closer) - re-taught again. **Takeaway: sanity-check a newly-taught
+   pose's numbers against an analogous already-taught one before deriving anything
+   from it.**
+
+**Known minor imprecision, left as-is by user's choice:** `left_volume_75`/
+`left_volume_half`'s X/Y (207.52, -33.575) differs from `left_volume_top`'s (206.245,
+-30.3) by a few mm - on `right_volume`, all three stops share identical X/Y (it's a
+single-axis mechanical slide, so gripping the same track should land on the same X/Y
+regardless of height). Not expected to be dangerous, just possibly a slightly less
+solid grip on `left_volume_top` specifically.
+
+**Repo state - nothing committed yet:** `hardware/software/{controls.json,
+derive_position.py, meca_controller.py, positions.json, test_actions.py}` are all
+modified. `brain/_analysis_a.json`, `brain/_analysis_b.json`, `brain/routine.json` are
+untracked leftovers from the Phase 3 live validation run. Commit when ready - see repo
+layout & conventions below for the branch/PR convention (branch from `main`, don't
+commit for the user).
+
+**Next up:** either finish Phase 4 (teach the deferred EQ/filter knobs, or take another
+run at `right_sync_press` with a different approach angle) or move to Phase 5 (build
+the feedback-driven arm executor - the actual next milestone now that the crossfader
+exists).
+
+---
+
+### Phase 3 — live validation run (previous session, kept for detail)
 
 **Where we are: Phase 3 is fully validated end-to-end against live Mixxx.** Two
 full-length, tempo-matched tracks - **Disclosure - She's Gone, Dance On** (133.9 bpm) into
@@ -254,7 +361,7 @@ always keep up, 4. no anticipation of the arm's own movement time.
 | 1 | **Live feed** | Python reads Mixxx's live beat/position (the drift fix's foundation) | ✅ done — gate confirmed (rate matches BPM exactly, see top) |
 | 2 | Analyzer | `analyze(song) → {bpm, beats, downbeats, sections}` JSON | ✅ done — validated on 4 real files, sections musically plausible (see top) |
 | 3 | Planner + Simulator | Generate a transition routine and **hear it in Mixxx**, no arm | ✅ done — full end-to-end run against live Mixxx with two real full-length tracks, heard and confirmed working (see top) |
-| 4 | Teach controls | Teach the arm the crossfader, channel faders, EQ/filter knobs, play/cue/SYNC buttons (no jog) | ⬜ physical — next up |
+| 4 | Teach controls | Teach the arm the crossfader, channel faders, EQ/filter knobs, play/cue/SYNC buttons (no jog) | 🟡 partially done — crossfader, left_volume, right/left_cue, left_sync taught; EQ/filter knobs deferred, right_sync unreachable (see START HERE) |
 | 5 | Arm backend | Run the validated routine on the arm, timed by the live feed + per-action lead times | ⬜ |
 
 **Critical path:** Phases 1–3 (the whole brain: live feed, analyzer, planner, simulator)
@@ -313,8 +420,16 @@ of any more brain work. Phase 5 joins the two proven halves.
 
 ## What's NOT built yet
 
-- Phase 4 new taught controls (crossfader, channel faders, EQ/filter knobs, play/cue/SYNC
-  buttons still not taught to the arm), Phase 5 feedback-driven arm executor.
+- Phase 4 remainder: EQ/filter knobs (`left_mid`, `right_filter`, `right_eq_hi`,
+  `left_eq_hi`, `right_eq_low`, `left_eq_low` - deferred, not blocking) and
+  `right_sync_press` (gripper can't physically reach it - needs a different approach
+  angle or fixture change to revisit). Crossfader, both channel faders, and 3 of 4
+  cue/sync buttons ARE now taught - see START HERE.
+- Phase 5 feedback-driven arm executor - not started. This is the actual next
+  milestone; the crossfader being taught unblocks attempting it.
+- `song_script.json` still only has the original V1 choreography - none of this
+  session's newly-taught controls have been wired into an actual choreography yet,
+  only taught and individually smoke-testable via `test_actions.py`.
 - Real per-action arm latencies and the planner's arm travel-time table (measured in Phase 5).
 - Knob `degrees_per_unit` is still a placeholder in `hardware/software/controls.json`.
 - Only crossfader + volume are in the routine so far (v1 scope, by design - see

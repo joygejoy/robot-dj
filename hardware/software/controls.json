@@ -7,10 +7,11 @@
     "type": "knob",
     "degrees_per_unit": 180
   },
-  "right_volume": {
+  "crossfader": {
     "type": "slider",
-    "left": "right_volume_half",
-    "right": "right_volume_top"
+    "left": "crossfader_left",
+    "right": "crossfader_right"
   },
-  "_comment_degrees_per_unit": "180 for right_mid/left_filter is still a PLACEHOLDER, not independently measured off the hardware. It's self-consistent with the choreography (0.5 -> 0.0 delta = 90 deg, matching the CCW 90 deg turns the song script uses) - recalculate once the real degrees_per_unit is measured off the knob itself."
+  "_comment_degrees_per_unit": "180 for right_mid/left_filter is still a PLACEHOLDER, not independently measured off the hardware. It's self-consistent with the choreography (0.5 -> 0.0 delta = 90 deg, matching the CCW 90 deg turns the song script uses) - recalculate once the real degrees_per_unit is measured off the knob itself.",
+  "_comment_right_volume": "right_volume is no longer an interpolated slider control - it's three directly-taught positions (right_volume_top, right_volume_75, right_volume_half) moved between with plain move_to actions in song_script.json, same as the knob/button engage positions. See dj_robot_progress.txt (2026-07-11) for why."
 }

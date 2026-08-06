@@ -25,13 +25,31 @@ KNOBS = {
 BUTTONS = {
     "right_play": {"press": "right_play_press", "hover": "right_play_hover"},
     "left_play": {"press": "left_play_press", "hover": "left_play_hover"},
+    "right_cue": {"press": "right_cue_press", "hover": "right_cue_press_hover"},
+    "left_cue": {"press": "left_cue_press", "hover": "left_cue_press_hover"},
+    "left_sync": {"press": "left_sync_press", "hover": "left_sync_press_hover"},
 }
+
+
+SAFE_DIRECT_TARGETS = {"home", "safe_hover"}
 
 
 def cmd_move_to(mc, name):
     if name not in mc.positions:
         raise SystemExit(f"'{name}' not in positions.json")
-    target = HOVER_FOR.get(name, name)
+    if name in HOVER_FOR:
+        target = HOVER_FOR[name]
+    elif name.endswith("_hover") or name in SAFE_DIRECT_TARGETS:
+        # name is already a retracted/reference position - safe to MoveJoints
+        # straight to its own joints.
+        target = name
+    else:
+        raise SystemExit(
+            f"'{name}' has no hover counterpart registered in HOVER_FOR yet - "
+            "moving straight to a working position's own joints has no "
+            "guaranteed safe Cartesian path. Derive/teach its hover and add "
+            "it to meca_controller.HOVER_FOR before testing this position."
+        )
     if target not in mc.positions:
         raise SystemExit(
             f"'{name}' needs its hover counterpart '{target}' taught first "
